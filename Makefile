@@ -812,16 +812,20 @@ SINGULARITY_SRC	 = \
 		   $(VCP_SRC)
 
 FLIP32F3OSD_SRC = \
-		   $(STM32F30x_COMMON_SRC) \
-		   drivers/accgyro_mpu.c \
-		   drivers/accgyro_mpu6500.c \
-		   drivers/compass_ak8963.c \
-		   drivers/barometer_bmp280.c \
-		   drivers/display_ug2864hsweg01.h \
-		   drivers/sonar_hcsr04.c \
-		   io/flashfs.c \
-		   $(HIGHEND_SRC) \
-		   $(COMMON_SRC)
+           $(STM32F30x_COMMON_SRC) \
+           drivers/accgyro_mpu.c \
+           drivers/accgyro_mpu6500.c \
+           drivers/compass_ak8963.c \
+           drivers/barometer_bmp280.c \
+           drivers/display_ug2864hsweg01.h \
+           drivers/flash_m25p16.c \
+           drivers/light_ws2811strip.c \
+           drivers/light_ws2811strip_stm32f30x.c \
+           drivers/serial_softserial.c \
+           drivers/sonar_hcsr04.c \
+           io/flashfs.c \
+           $(HIGHEND_SRC) \
+           $(COMMON_SRC)
 
 
 # Search path and source files for the ST stdperiph library
