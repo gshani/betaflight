@@ -17,10 +17,12 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdarg.h>
 #include <string.h>
 
 #include "platform.h"
+
+#ifdef DISPLAY
+
 #include "version.h"
 #include "debug.h"
 
@@ -38,15 +40,11 @@
 #include "common/axis.h"
 #include "common/typeconversion.h"
 
-#ifdef DISPLAY
-
 #include "sensors/battery.h"
 #include "sensors/sensors.h"
 #include "sensors/compass.h"
 #include "sensors/acceleration.h"
 #include "sensors/gyro.h"
-
-#include "rx/rx.h"
 
 #include "io/rc_controls.h"
 
@@ -63,9 +61,9 @@
 #include "config/runtime_config.h"
 #include "config/config_profile.h"
 
-#include "display.h"
+#include "io/display.h"
 
-#include "scheduler.h"
+#include "scheduler/scheduler.h"
 
 extern profile_t *currentProfile;
 

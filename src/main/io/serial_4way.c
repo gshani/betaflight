@@ -32,12 +32,12 @@
 #include "drivers/pwm_output.h"
 #include "drivers/light_led.h"
 #include "drivers/system.h"
-#include "drivers/buf_writer.h"
 #include "flight/mixer.h"
 #include "io/beeper.h"
 #include "io/serial_msp.h"
 #include "io/serial_msp.h"
 #include "io/serial_4way.h"
+#include "io/serial_4way_impl.h"
 
 #ifdef USE_SERIAL_4WAY_BLHELI_BOOTLOADER
 #include "io/serial_4way_avrootloader.h"
@@ -100,46 +100,34 @@ inline bool isMcuConnected(void)
 
 inline bool isEscHi(uint8_t selEsc)
 {
-    return (digitalIn(escHardware[selEsc].gpio, escHardware[selEsc].pin) != Bit_RESET);
+    return (IORead(escHardware[selEsc].io) != Bit_RESET);
 }
 inline bool isEscLo(uint8_t selEsc)
 {
-    return (digitalIn(escHardware[selEsc].gpio, escHardware[selEsc].pin) == Bit_RESET);
+    return (IORead(escHardware[selEsc].io) == Bit_RESET);
 }
 
 inline void setEscHi(uint8_t selEsc)
 {
-    digitalHi(escHardware[selEsc].gpio, escHardware[selEsc].pin);
+    IOHi(escHardware[selEsc].io);
 }
 
 inline void setEscLo(uint8_t selEsc)
 {
-    digitalLo(escHardware[selEsc].gpio, escHardware[selEsc].pin);
+    IOLo(escHardware[selEsc].io);
 }
 
 inline void setEscInput(uint8_t selEsc)
 {
-    gpioInit(escHardware[selEsc].gpio, &escHardware[selEsc].gpio_config_INPUT);
+    IOConfigGPIO(escHardware[selEsc].io, IOCFG_IPU);
 }
 
 inline void setEscOutput(uint8_t selEsc)
 {
-    gpioInit(escHardware[selEsc].gpio, &escHardware[selEsc].gpio_config_OUTPUT);
+    IOConfigGPIO(escHardware[selEsc].io, IOCFG_OUT_PP);
 }
 
-static uint32_t GetPinPos(uint32_t pin)
-{
-    uint32_t pinPos;
-    for (pinPos = 0; pinPos < 16; pinPos++) {
-        uint32_t pinMask = (0x1 << pinPos);
-        if (pin & pinMask) {
-            return pinPos;
-        }
-    }
-    return 0;
-}
-
-uint8_t Initialize4WayInterface(void)
+uint8_t esc4wayInit(void)
 {
     // StopPwmAllMotors();
     pwmDisableMotors();
@@ -149,14 +137,7 @@ uint8_t Initialize4WayInterface(void)
     for (volatile uint8_t i = 0; i < pwmOutputConfiguration->outputCount; i++) {
         if ((pwmOutputConfiguration->portConfigurations[i].flags & PWM_PF_MOTOR) == PWM_PF_MOTOR) {
             if(motor[pwmOutputConfiguration->portConfigurations[i].index] > 0) {
-                escHardware[escCount].gpio = pwmOutputConfiguration->portConfigurations[i].timerHardware->gpio;
-                escHardware[escCount].pin = pwmOutputConfiguration->portConfigurations[i].timerHardware->pin;
-                escHardware[escCount].pinpos = GetPinPos(escHardware[escCount].pin);
-                escHardware[escCount].gpio_config_INPUT.pin = escHardware[escCount].pin;
-                escHardware[escCount].gpio_config_INPUT.speed = Speed_2MHz; // see pwmOutConfig()
-                escHardware[escCount].gpio_config_INPUT.mode = Mode_IPU;
-                escHardware[escCount].gpio_config_OUTPUT = escHardware[escCount].gpio_config_INPUT;
-                escHardware[escCount].gpio_config_OUTPUT.mode = Mode_Out_PP;
+                escHardware[escCount].io = IOGetByTag(pwmOutputConfiguration->portConfigurations[i].timerHardware->tag);
                 setEscInput(escCount);
                 setEscHi(escCount);
                 escCount++;
@@ -166,12 +147,11 @@ uint8_t Initialize4WayInterface(void)
     return escCount;
 }
 
-void DeInitialize4WayInterface(void)
+void esc4wayRelease(void)
 {
     while (escCount > 0) {
         escCount--;
-        escHardware[escCount].gpio_config_OUTPUT.mode = Mode_AF_PP; // see pwmOutConfig()
-        setEscOutput(escCount);
+        IOConfigGPIO(escHardware[escCount].io, IOCFG_AF_PP);
         setEscLo(escCount);
     }
     pwmEnableMotors();
@@ -381,32 +361,37 @@ static uint8_t Connect(uint8_32_u *pDeviceInfo)
     return 0;
 }
 
-static mspPort_t *_mspPort;
-static bufWriter_t *_writer;
+static serialPort_t *port;
 
-static uint8_t ReadByte(void) {
+static uint8_t ReadByte(void) 
+{
     // need timeout?
-    while (!serialRxBytesWaiting(_mspPort->port));
-    return serialRead(_mspPort->port);
+    while (!serialRxBytesWaiting(port));
+    return serialRead(port);
 }
 
 static uint8_16_u CRC_in;
-static uint8_t ReadByteCrc(void) {
+static uint8_t ReadByteCrc(void)
+{
     uint8_t b = ReadByte();
     CRC_in.word = _crc_xmodem_update(CRC_in.word, b);
     return b;
 }
-static void WriteByte(uint8_t b){
-    bufWriterAppend(_writer, b);
+
+static void WriteByte(uint8_t b)
+{
+    serialWrite(port, b);
 }
 
 static uint8_16_u CRCout;
-static void WriteByteCrc(uint8_t b){
+static void WriteByteCrc(uint8_t b)
+{
     WriteByte(b);
     CRCout.word = _crc_xmodem_update(CRCout.word, b);
 }
 
-void Process4WayInterface(mspPort_t *mspPort, bufWriter_t *bufwriter) {
+void esc4wayProcess(serialPort_t *mspPort) 
+{
 
     uint8_t ParamBuf[256];
     uint8_t ESC;
@@ -420,8 +405,7 @@ void Process4WayInterface(mspPort_t *mspPort, bufWriter_t *bufwriter) {
     uint8_t *InBuff;
     ioMem_t ioMem;
 
-    _mspPort = mspPort;
-    _writer = bufwriter;
+    port = mspPort;
 
     // Start here  with UART Main loop
     #ifdef BEEPER
@@ -459,20 +443,21 @@ void Process4WayInterface(mspPort_t *mspPort, bufWriter_t *bufwriter) {
         CRC_check.bytes[1] = ReadByte();
         CRC_check.bytes[0] = ReadByte();
 
-        RX_LED_OFF;
-
         if(CRC_check.word == CRC_in.word) {
             ACK_OUT = ACK_OK;
         } else {
             ACK_OUT = ACK_I_INVALID_CRC;
         }
-
+        
+        TX_LED_ON;
+        
         if (ACK_OUT == ACK_OK)
         {
             // wtf.D_FLASH_ADDR_H=Adress_H;
             // wtf.D_FLASH_ADDR_L=Adress_L;
             ioMem.D_PTR_I = ParamBuf;
 
+            
             switch(CMD) {
                 // ******* Interface related stuff *******
                 case cmd_InterfaceTestAlive:
@@ -538,13 +523,13 @@ void Process4WayInterface(mspPort_t *mspPort, bufWriter_t *bufwriter) {
                 }
                 case cmd_InterfaceSetMode:
                 {
-                    #if defined(USE_SERIAL_4WAY_BLHELI_BOOTLOADER) && defined(USE_SERIAL_4WAY_SK_BOOTLOADER)
+#if defined(USE_SERIAL_4WAY_BLHELI_BOOTLOADER) && defined(USE_SERIAL_4WAY_SK_BOOTLOADER)
                     if ((ParamBuf[0] <= imSK) && (ParamBuf[0] >= imSIL_BLB)) {
-                    #elif defined(USE_SERIAL_4WAY_BLHELI_BOOTLOADER)
+#elif defined(USE_SERIAL_4WAY_BLHELI_BOOTLOADER)
                     if ((ParamBuf[0] <= imATM_BLB) && (ParamBuf[0] >= imSIL_BLB)) {
-                    #elif defined(USE_SERIAL_4WAY_SK_BOOTLOADER)
+#elif defined(USE_SERIAL_4WAY_SK_BOOTLOADER)
                     if (ParamBuf[0] == imSK) {
-                    #endif
+#endif
                         CurrentInterfaceMode = ParamBuf[0];
                     } else {
                         ACK_OUT = ACK_I_INVALID_PARAM;
@@ -632,7 +617,7 @@ void Process4WayInterface(mspPort_t *mspPort, bufWriter_t *bufwriter) {
                             //Address = Page * 512
                             ioMem.D_FLASH_ADDR_H = (Dummy.bytes[0] << 1);
                             ioMem.D_FLASH_ADDR_L = 0;
-                            if (!BL_PageErase(&ioMem))  ACK_OUT = ACK_D_GENERAL_ERROR;
+                            if (!BL_PageErase(&ioMem)) ACK_OUT = ACK_D_GENERAL_ERROR;
                             break;
                         }
                         default:
@@ -809,8 +794,9 @@ void Process4WayInterface(mspPort_t *mspPort, bufWriter_t *bufwriter) {
 
         CRCout.word = 0;
 
-        TX_LED_ON;
-        serialBeginWrite(_mspPort->port);
+        RX_LED_OFF;
+
+        serialBeginWrite(port);
         WriteByteCrc(cmd_Remote_Escape);
         WriteByteCrc(CMD);
         WriteByteCrc(ioMem.D_FLASH_ADDR_H);
@@ -827,11 +813,11 @@ void Process4WayInterface(mspPort_t *mspPort, bufWriter_t *bufwriter) {
         WriteByteCrc(ACK_OUT);
         WriteByte(CRCout.bytes[1]);
         WriteByte(CRCout.bytes[0]);
-        serialEndWrite(_mspPort->port);
-        bufWriterFlush(_writer);
+        serialEndWrite(port);
+                    
         TX_LED_OFF;
         if (isExitScheduled) {
-            DeInitialize4WayInterface();
+            esc4wayRelease();
             return;
         }
     };

@@ -8,17 +8,22 @@ targets=("PUBLISHMETA=True" \
     "TARGET=SPRACINGF3" \
     "TARGET=SPRACINGF3EVO" \
     "TARGET=SPRACINGF3MINI" \
+    "TARGET=OMNIBUS" \
     "TARGET=NAZE" \
     "TARGET=AFROMINI" \
     "TARGET=RMDO" \
     "TARGET=SPARKY" \
     "TARGET=MOTOLAB" \
+    "TARGET=PIKOBLX" \
     "TARGET=IRCFUSIONF3" \
     "TARGET=ALIENFLIGHTF1" \
     "TARGET=ALIENFLIGHTF3" \
     "TARGET=DOGE" \
     "TARGET=SINGULARITY" \
-    "TARGET=FURYF3")
+    "TARGET=SIRINFPV" \
+    "TARGET=X_RACERSPI" \
+    "TARGET=RCEXPLORERF3")
+
 
 #fake a travis build environment
 export TRAVIS_BUILD_NUMBER=$(date +%s)
@@ -28,9 +33,9 @@ export TRAVIS_REPO_SLUG=${TRAVIS_REPO_SLUG:=$USER/simulated}
 for target in "${targets[@]}"
 do
 	unset RUNTESTS PUBLISHMETA TARGET
-  echo
-  echo
-  echo "BUILDING '$target'"
+	echo
+	echo
+	echo "BUILDING '$target'"
 	eval "export $target"
 	make -f Makefile clean
 	./.travis.sh

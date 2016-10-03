@@ -22,7 +22,6 @@
  * as this header is maintained with the file at all times.
  */
 
-#include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -100,7 +99,7 @@ static const uint32_t channelArray[RTC6705_BAND_MAX][RTC6705_CHANNEL_MAX] = {
  * Send a command and return if good
  * TODO chip detect
  */
-static bool rtc6705IsReady()
+static bool rtc6705IsReady(void)
 {
     // Sleep a little bit to make sure it has booted
     delay(50);
@@ -115,7 +114,8 @@ static bool rtc6705IsReady()
  * This is easier for when generating the frequency to then
  * reverse the bits afterwards
  */
-static uint32_t reverse32(uint32_t in) {
+static uint32_t reverse32(uint32_t in)
+{
     uint32_t out = 0;
 
     for (uint8_t i = 0 ; i < 32 ; i++)
@@ -129,10 +129,10 @@ static uint32_t reverse32(uint32_t in) {
 /**
  * Start chip if available
  */
-bool rtc6705Init()
+bool rtc6705Init(void)
 {
     DISABLE_RTC6705;
-    spiSetDivisor(RTC6705_SPI_INSTANCE, SPI_0_5625MHZ_CLOCK_DIVIDER);
+    spiSetDivisor(RTC6705_SPI_INSTANCE, SPI_CLOCK_SLOW);
     return rtc6705IsReady();
 }
 
@@ -179,7 +179,7 @@ void rtc6705SetFreq(uint16_t freq)
 
     uint32_t val_a = ((((uint64_t)freq*(uint64_t)RTC6705_SET_DIVMULT*(uint64_t)RTC6705_SET_R)/(uint64_t)RTC6705_SET_DIVMULT) % RTC6705_SET_FDIV) / RTC6705_SET_NDIV; //Casts required to make sure correct math (large numbers)
     uint32_t val_n = (((uint64_t)freq*(uint64_t)RTC6705_SET_DIVMULT*(uint64_t)RTC6705_SET_R)/(uint64_t)RTC6705_SET_DIVMULT) / RTC6705_SET_FDIV; //Casts required to make sure correct math (large numbers)
- 
+
     val_hex |= RTC6705_SET_WRITE;
     val_hex |= (val_a << 5);
     val_hex |= (val_n << 12);
